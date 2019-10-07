@@ -1,40 +1,47 @@
 <?php
+ 
+
 require 'vendor/autoload.php';
 require 'config.php';
 
-require ‘start.php’;
-use Controllers\Chamados; 
- 
+require 'start.php';
+
+use Controllers\ChamadoController;
+
+
 
 if(!is_file(__DIR__.'/.env')){
     die();
 }
 
-$conf = json_decode(file_get_contents(__DIR__.'/.env'));
 
+$conf = json_decode(file_get_contents(__DIR__ . '/.env'));
 
 
 $date = date("Y-m-d");//,strtotime('-1 days'));
 
+
 $headersDM = array (
-    "Authorization: {$conf->tokenApiDK}",
+    "Authorization: {$conf->tokenDK}",
     'Content-Type: application/json; charset=UTF-8',
     "cache-control: no-cache"
 );
 
+
 $headersOP = array(
-    "Authorization: Basic ". base64_encode('apikey:'.$user->projectToken ),
+    "Authorization: Basic ". base64_encode('apikey:'.$conf->ooToken),
     "Content-Type: application/json",
     "cache-control: no-cache"
 );
-  
+
+
+
 
 $listarChamadosEmAndamentoFilter = montaFiltroChamadoPorStatus("Em andamento");
+
 $listarChamadosAguardandoAtendimentoFilter = montaFiltroChamadoPorStatus("Aguardando atendimento");
 
-
-
-listarChamadosAguardandoAtendimentoEPrevenirInteracao();
+listarChamadosAguardandoAtendimentoEPrevenirInteracao($listarChamadosAguardandoAtendimentoFilter, $conf->base_url_DM, $conf->lista_chamados, $headersDM);
 listarChamadosECriarNoOP();
 listarChamadosEAtualizarStatus();
 
@@ -45,12 +52,13 @@ function retorna_chave($chamado){
 
 
 
-function listarChamadosAguardandoAtendimentoEPrevenirInteracao(){
+function listarChamadosAguardandoAtendimentoEPrevenirInteracao($filtro, $base_url, $endpoint, $header){
+
+    //var_dump($filtro, $base_url, $endpoint, $header);
+    $chamadosAguardandoAtendimento = doCurl($filtro, $base_url, $endpoint, $header)->root;
     
-    $chamadosAguardandoAtendimento = doCurl($listarChamadosAguardandoAtendimentoFilter, $conf->base_url_DM, $lista_chamados, $headerDM)->root;
-
     $chavesAguardandoAtendimento = array_map('retorna_chave',$chamadosAguardandoAtendimento);
-
+    
     Chamados::update_chamados_can_interact_in_chaves($chaves);
      
 }
@@ -59,22 +67,29 @@ function listarChamadosAguardandoAtendimentoEPrevenirInteracao(){
 
 function doCurl($data, $baseUrl, $endpoint, $headers)
 {
+
     $ch = curl_init();
-    curl_setopt( $ch, CURLOPT_URL, $baseUrl ."". $endpoint );
+
+    curl_setopt( $ch, CURLOPT_URL, $baseUrl ."/". $endpoint );
     curl_setopt( $ch, CURLOPT_HTTPHEADER, $headers );
     curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
     curl_setopt( $ch, CURLOPT_POSTFIELDS, json_encode($data) );
+
+    //var_dump(curl_getinfo($ch));
     
     $result = curl_exec( $ch );
+
+    var_dump($result);
 
     $err = curl_error( $curl );
     curl_close( $ch );
 
     
     if ($err) {
+        var_dump($err);
         return null;
     } else {
-        $dados = json_decode($response);
+        $dados = json_decode($result);
         return $dados;
     }
 }
@@ -89,6 +104,8 @@ function atualizarStatusDM($chamado)
 function listarChamadosECriarNoOP()
 {
     $chamadosEmAndamento = doCurl($listarChamadosEmAndamentoFilter, $conf->base_url_DM, $conf->lista_chamados, $headersDM)->root;
+
+    var_dump($chamadosEmAndamento);
 
     $chamadosJaRegistrados = Chamados::get_chamados();
 
@@ -159,7 +176,9 @@ function criarInteracaoAPartirDeWorkPackage($chave, $novoStatus)
 
 
 function montaFiltroChamadoPorStatus($status){
-    return array(
+    
+    
+    $filtro = array(
         "Pesquisa" => $status,
         "Colunas" =>  array(
             "Chave" => "on",		
@@ -172,6 +191,8 @@ function montaFiltroChamadoPorStatus($status){
             "NomeOperador" => "on",	
             "SobrenomeOperador" => "on"
     ));
+    
+    return $filtro;
 }
 
 function listarChamadosEAtualizarStatus(){

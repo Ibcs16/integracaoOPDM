@@ -11,5 +11,11 @@
     ],
     "require": {
         "illuminate/database": "^6.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Controllers\\": "app/controllers",
+            "Models\\": "app/models"
+        }
     }
 }

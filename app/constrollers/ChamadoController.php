@@ -2,7 +2,7 @@
 namespace Controllers;
 use Models\Chamado;
 
-class Chamados{
+class ChamadoController{
 
     public static function create_chamado($chave, $cod, $status_name, $project_id=null){
         $chamado = Chamado::create(['chave'=>$chave,'cod'=>$cod,'project_id'=>$project_id,'status_name'=>$status_name]);
