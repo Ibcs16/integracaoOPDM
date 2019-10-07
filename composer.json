@@ -1,0 +1,15 @@
+{
+    "name": "leandro.rocha/desk-manager-and-open-project-integration",
+    "description": "Integra\u0000\u0000o entre OP e DM",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ibcs16",
+            "email": "iagobrayhamcunha@hotmail.com"
+        }
+    ],
+    "require": {
+        "illuminate/database": "^6.1"
+    }
+}
