@@ -1,8 +1,11 @@
 <?php
- 
+ ini_set('display_errors',1);
+ ini_set('display_startup_erros',1);
+ error_reporting(E_ALL);
 
-require 'vendor/autoload.php';
 require 'config.php';
+require 'vendor/autoload.php';
+
 
 require 'start.php';
 
@@ -15,36 +18,60 @@ if(!is_file(__DIR__.'/.env')){
 }
 
 
-$conf = json_decode(file_get_contents(__DIR__ . '/.env'));
+$conf = json_decode(file_get_contents(__DIR__ . '/.env'), true);
 
 
 $date = date("Y-m-d");//,strtotime('-1 days'));
 
 
-$headersDM = array (
-    "Authorization: {$conf->tokenDK}",
-    'Content-Type: application/json; charset=UTF-8',
-    "cache-control: no-cache"
-);
-
-
-$headersOP = array(
-    "Authorization: Basic ". base64_encode('apikey:'.$conf->ooToken),
-    "Content-Type: application/json",
-    "cache-control: no-cache"
-);
 
 
 
+function getHeader($token, $option){
+    $headers = [];
 
-$listarChamadosEmAndamentoFilter = montaFiltroChamadoPorStatus("Em andamento");
+    switch($option){
+        case 0:
+            $headers = array (
+                "Authorization: {$token}",
+                'Content-Type: application/json; charset=UTF-8',
+                "cache-control: no-cache"
+            );
+            break;
+        case 1:
+            $headers = array(
+                "Authorization: Basic ". base64_encode('apikey:'.$token),
+                "Content-Type: application/json",
+                "cache-control: no-cache"
+            );
+            break;
+    }
 
-$listarChamadosAguardandoAtendimentoFilter = montaFiltroChamadoPorStatus("Aguardando atendimento");
+    return $headers;
+}
 
-listarChamadosAguardandoAtendimentoEPrevenirInteracao($listarChamadosAguardandoAtendimentoFilter, $conf->base_url_DM, $conf->lista_chamados, $headersDM);
-listarChamadosECriarNoOP();
-listarChamadosEAtualizarStatus();
 
+
+
+$listarChamadosEmAndamentoFilter = montaFiltroChamadoPorStatus('');//"Em andamento");
+
+$listarChamadosAguardandoAtendimentoFilter = montaFiltroChamadoPorStatus('');//"Aguardando atendimento");
+
+
+listarChamadosAguardandoAtendimentoEPrevenirInteracao($listarChamadosAguardandoAtendimentoFilter, $conf['base_url_DM'], $conf['lista_chamados'], $conf);
+listarChamadosECriarNoOP($listarChamadosEmAndamentoFilter, $conf['base_url_DM'], $conf['lista_chamados'], $conf);
+listarChamadosEAtualizarStatus($conf);
+
+
+function autenticarDM($conf){
+    
+    $body = array("PublicKey"=> $conf['dkAmbiente']);
+    $header = getHeader($conf['dkOperador'], 0);
+
+    $token = doCurl($body, $conf['base_url_DM'], $conf['autenticarDM'], $header, true);
+
+    return substr($token, 1, -1);
+}
 
 function retorna_chave($chamado){
     return $chamado->Chave;
@@ -52,69 +79,109 @@ function retorna_chave($chamado){
 
 
 
-function listarChamadosAguardandoAtendimentoEPrevenirInteracao($filtro, $base_url, $endpoint, $header){
+function listarChamadosAguardandoAtendimentoEPrevenirInteracao($filtro, $base_url, $endpoint, $conf){
+    $token = autenticarDM($conf);
 
-    //var_dump($filtro, $base_url, $endpoint, $header);
-    $chamadosAguardandoAtendimento = doCurl($filtro, $base_url, $endpoint, $header)->root;
     
-    $chavesAguardandoAtendimento = array_map('retorna_chave',$chamadosAguardandoAtendimento);
+    if($token!==null){
+
+        $headers = getHeader($token, 0);
+        $chamadosAguardandoAtendimento = doCurl($filtro, $base_url, $endpoint, $headers)->root;
+
+        if(isset($chamadosAguardandoAtendimento->erro)){
+            return;
+        }
+
+       
+        $chavesAguardandoAtendimento = array_map('retorna_chave',$chamadosAguardandoAtendimento);
+
+        ChamadoController::update_chamados_in_chaves_can_interact($chavesAguardandoAtendimento);
+        
+    }
     
-    Chamados::update_chamados_can_interact_in_chaves($chaves);
      
 }
 
 
 
-function doCurl($data, $baseUrl, $endpoint, $headers)
+function doCurl($data, $baseUrl, $endpoint, $headers, $raw=false, $hasbody = true, $method = -1)
 {
 
+    //var_dump($data, $baseUrl, $endpoint, $headers, $raw, $method);
+
     $ch = curl_init();
+
+    switch($method){
+        case 1:
+            curl_setopt( $ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+        break;
+        case 2:
+            curl_setopt( $ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+        break;
+        case 3:
+            curl_setopt( $ch, CURLOPT_CUSTOMREQUEST, 'GET');
+        break;
+    }
+    
 
     curl_setopt( $ch, CURLOPT_URL, $baseUrl ."/". $endpoint );
     curl_setopt( $ch, CURLOPT_HTTPHEADER, $headers );
     curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-    curl_setopt( $ch, CURLOPT_POSTFIELDS, json_encode($data) );
+    if($hasbody) curl_setopt( $ch, CURLOPT_POSTFIELDS, json_encode($data) );
 
     //var_dump(curl_getinfo($ch));
     
     $result = curl_exec( $ch );
+   
 
-    var_dump($result);
-
-    $err = curl_error( $curl );
+    $err = curl_error( $ch );
     curl_close( $ch );
 
     
     if ($err) {
-        var_dump($err);
+       
         return null;
     } else {
-        $dados = json_decode($result);
-        return $dados;
+        if(!$raw){
+            $dados = json_decode($result);
+            return $dados;
+        }else{
+            return $result;
+        }
     }
 }
 
 
-function atualizarStatusDM($chamado) 
+function atualizarStatusDM($chamado, $conf) 
 {
-    interagirComChamado($chamado->chave, $chamado->status_name);
+    interagirComChamado($chamado->chave, $chamado->status_name, $conf);
 }
 
 
-function listarChamadosECriarNoOP()
+function listarChamadosECriarNoOP($filter, $base_url, $endpoint,  $conf)
 {
-    $chamadosEmAndamento = doCurl($listarChamadosEmAndamentoFilter, $conf->base_url_DM, $conf->lista_chamados, $headersDM)->root;
+    $token = autenticarDM($conf);
+    
+    if($token!=null){
 
-    var_dump($chamadosEmAndamento);
+        $headerWithToken = getHeader($token, 0);
 
-    $chamadosJaRegistrados = Chamados::get_chamados();
+        $chamadosEmAndamento = doCurl($filter, $base_url, $endpoint, $headerWithToken)->root;
 
-    $novosBugs = array_diff($chamadosJaRegistrados, $chamadosEmAndamento);
+        if(isset($chamadosEmAndamento->erro)){
+            return;
+        }
 
-    if(count($novosBugs)){
-        foreach($novosBugs as $bug){
-            criarChamadoNoBD($bug);
-            criarWorkPackage($bug);
+        $chamadosJaRegistrados = ChamadoController::get_chamados();
+
+        $novosBugs = $chamadosJaRegistrados;//array_diff($chamadosJaRegistrados, $chamadosEmAndamento);
+
+
+        if(count($novosBugs)){
+            //foreach($novosBugs as $bug){
+                //criarChamadoNoBD($bug);
+                criarWorkPackage($novosBugs[0], $conf);//$bug, $conf);
+            //}
         }
     }
 
@@ -123,55 +190,80 @@ function listarChamadosECriarNoOP()
 
 function criarChamadoNoBD($bug)
 {
-    return $chamado = Chamados::create_chamado($bug->Chave,$bug->CodChamado, $bug->NomeStatus);
+    return $chamado = ChamadoController::create_chamado($bug->chave,$bug->cod, $bug->status_name);
     
 }
 
-function criarWorkPackage($chamado_origin)
+function criarWorkPackage($chamado_origin, $conf)
 {
-    $workPackage = doCurl($workPackage,$conf->base_url_OP.$conf->create_work_package,$headersOP);
+    $data = [];
 
-    if($chamado!=null){
-        syncChamadoProjectId($workPackage->id, $chamado->chave);
+    $headersOP = getHeader($conf['opToken'], 1);
+
+    $form = doCurl($data, $conf['base_url_OP'], $conf['get_form'], $headersOP);
+
+
+    if($form->_type!='Error'){
+        $workPackage = getWorkpackageSchemaFromChamado($chamado_origin, $form);
+
+
+        $newWorkPackage = doCurl($workPackage, $conf['base_url_OP'], $conf['create_work_package'], $headersOP);
+
+    
+        if($workPackage!=null&&isset($workPackage->id)){
+            syncChamadoProjectId($newWorkPackage->id, $chamado_origin->chave);
+        }
     }
+  
     
 }
 
 
 function syncChamadoProjectId($workPackageId, $chamado_origin_chave)
 {
-    Chamados::update_project_id($chamado_origin_chave, $workPackageId);
+    ChamadoController::update_project_id($chamado_origin_chave, $workPackageId);
 }
 
 function syncChamadoStatus($chave, $nomeStatus){
-    Chamados::update_status_name($chave, $nomeStatus);
+    ChamadoController::update_status_name($chave, $nomeStatus);
 }
 
 
-function interagirComChamado($chave, $nomeStatus)
+function interagirComChamado($chave, $nomeStatus, $conf)
 {
-    $interacaoChamado = criarInteracaoAPartirDeWorkPackage($chave, $nomeStatus);
-    $interagir = doCurl($interacaoChamado, $conf->base_url_DM, $conf->muda_status_chamado, $headersDM);
+    $token = autenticarDM($conf);
     
-    if($interagir!=null){
+    if(!$token){
+        return;
+    }
+
+    $headersDM = getHeader($token, 0);
+
+    $interacaoChamado = criarInteracaoAPartirDeWorkPackage($chave, $nomeStatus, $conf);
+    $interagir = doCurl($interacaoChamado, $conf['base_url_DM'], $conf['muda_status_chamado'], $headersDM, false, true, 1);
+    
+    if($interagir!=null&&!isset($interagir->erro)){
         syncChamadoStatus($chave,  $nomeStatus);
     }
 }
 
 
-function criarInteracaoAPartirDeWorkPackage($chave, $novoStatus)
+function criarInteracaoAPartirDeWorkPackage($chave, $novoStatus, $conf)
 {
+    $codStatus = $conf['STATUS_CODES_DM'][$novoStatus];
+    $codMensagem = $conf['FRASES_PRONTAS_CODES_DM'][$novoStatus];
+
     $interacaoChamado = array(
         "Chave" => $chave,
         "TChamado" => array(
             "Descricao" => "Atualização de status",
-            "CodStatus" => $conf->STATUS_CODES_DM[$novoStatus],
+            "CodStatus" => $codStatus,
             "DataInteracao" => date('d-m-Y'),
             "CodFormaAtendimento"=> "000001",
-            "CodFPMsg" => $conf->FRASES_PRONTAS_CODES_DM[$novoStatus]
+            "CodFPMsg" => $codMensagem
         )
     );
-    return json_encode($interacaoChamado);
+    return $interacaoChamado;
 }
 
 
@@ -195,21 +287,107 @@ function montaFiltroChamadoPorStatus($status){
     return $filtro;
 }
 
-function listarChamadosEAtualizarStatus(){
-    $chamadosRegistrados = Chamados::get_chamados_can_interact();
-
+function listarChamadosEAtualizarStatus($conf){
+    $chamadosRegistrados = ChamadoController::get_chamados_can_interact();
+    var_dump($chamadosRegistrados);
     foreach($chamadosRegistrados as $chamado){
         $oldStatus = $chamado->status_name;
-        $newStatus = getWorkPackageStatus($chamado->project_id);
+        $newStatus = getWorkPackageStatus($chamado->project_id, $conf);
         if($newStatus!=null&&$oldStatus!=$newStatus){
-            atualizarStatusDM($chamado);
+            $chamado->status_name = $newStatus;
+            atualizarStatusDM($chamado, $conf);
         }
     }
 
 }
 
-function getWorkPackageStatus($id){
-    $workPackage = doCurl($id, $conf->base_url_OP, $conf->get_work_package, $headersOP);
+function getWorkPackageStatus($id, $conf){
+    $headersOP = getHeader($conf['opToken'],1);
 
-    return $workPackage!=null?$workPackage->status:null;
+    $data = '';
+
+    $workPackage = doCurl($data, $conf['base_url_OP'], $conf['get_work_package'] . '/' . $id, $headersOP, false, false, 2);
+    var_dump($workPackage);
+
+    if($workPackage->_type=='Error'){
+        return null;
+    }
+
+    $newStatus = getStatusNameFromWorkPackage($workPackage->_embedded->status->name, $conf);
+    return $workPackage!=null?$newStatus:null;
+}
+
+function getStatusNameFromWorkPackage($origin_name, $conf){
+    $status_name = $origin_name;
+
+    foreach($conf['STATUS_CODES_OP_PT_BR'] as $status=>$value){
+        var_dump($status);
+        if($status_name==$status){
+            $status_name = $value;
+            break;
+        }
+    }
+
+    return $status_name;
+}
+
+
+function getWorkpackageSchemaFromChamado($chamado, $form){
+    $customerId =  getCustomerId($chamado, $form);
+    $workPackage = array (
+        'subject' => "Teste OS digital chamado",
+        'description' => 
+            array (
+                'format' => 'markdown',
+                'raw' => 'test',
+                'html' => 'test',
+            ),
+        '_links' => 
+            array (
+            'type' => 
+                array (
+                    'href' => '/api/v3/types/7',
+                ),
+            'priority' => 
+                array (
+                    'href' => '/api/v3/priorities/1',
+                ),
+            'project' => 
+                array (
+                    'href' => '/api/v3/projects/43',
+                ),
+            'status' => 
+                array (
+                    'href' => '/api/v3/statuses/1',
+                ),
+            'author' => 
+                array (
+                    'href' => '/api/v3/users/36',
+                    'title' => 'api integracao',
+                ),
+            'customField11' => 
+                array (
+                    'href' => "/api/v3/custom_options/$customerId",
+                ),
+            )
+        );
+
+
+        return $workPackage;
+}
+
+
+function getCustomerId($chamado_origin, $form){
+    $customerName = 'TrackerUp';//$chamado->customerName; teste
+    $customerID = 22;
+
+    $valuesCustomer = $form->_embedded->schema->customField11->_embedded->allowedValues;
+    foreach($valuesCustomer as $customer){
+        if($customer->value&&$customer->value==$customerName){
+            $customerID = $customer->id;
+            break;
+        }
+    }
+
+    return $customerID;
 }

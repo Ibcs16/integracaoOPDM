@@ -6,7 +6,7 @@ use \Illuminate\Database\Eloquent\Model;
  
 class Chamado extends Model {
      
-    protected $table = 'chamados';
+    protected $table = 'chamado';//'chamados';
     protected $fillable = ['status_name','chave','project_id','updated_at'];
 
      
