@@ -2,7 +2,7 @@
 EN-US:
 Api integration between OpenProject (https://www.openproject.org/) and DeskManager (https://deskmanager.com.br/).
 
-This project is designed to be run via cron job, and do mainly 2 things: 
+This project is designed to be run via cron job, and it does mainly 2 things: 
 
 - Create workpackage (tasks) in openproject upon newly created client service requests from deskmanager
 - Change client service status based on OpenProject workpackages' status.
