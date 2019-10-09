@@ -103,7 +103,7 @@ function listarChamadosAguardandoAtendimentoEPrevenirInteracao($filtro, $base_ur
 }
 
 
-
+//makes htto-request
 function doCurl($data, $baseUrl, $endpoint, $headers, $raw=false, $hasbody = true, $method = -1)
 {
 
@@ -151,13 +151,14 @@ function doCurl($data, $baseUrl, $endpoint, $headers, $raw=false, $hasbody = tru
     }
 }
 
-
+//updates status in deskmanager
 function atualizarStatusDM($chamado, $conf) 
 {
     interagirComChamado($chamado->chave, $chamado->status_name, $conf);
 }
 
 
+//get new request from deskManager and create workpackage in openproject
 function listarChamadosECriarNoOP($filter, $base_url, $endpoint,  $conf)
 {
     $token = autenticarDM($conf);
@@ -187,13 +188,14 @@ function listarChamadosECriarNoOP($filter, $base_url, $endpoint,  $conf)
 
 }
 
-
+//sends to database
 function criarChamadoNoBD($bug)
 {
     return $chamado = ChamadoController::create_chamado($bug->chave,$bug->cod, $bug->status_name);
     
 }
 
+//sends request for workpackage creation
 function criarWorkPackage($chamado_origin, $conf)
 {
     $data = [];
@@ -218,17 +220,18 @@ function criarWorkPackage($chamado_origin, $conf)
     
 }
 
-
+//updates workpackage id - DB
 function syncChamadoProjectId($workPackageId, $chamado_origin_chave)
 {
     ChamadoController::update_project_id($chamado_origin_chave, $workPackageId);
 }
 
+//updates new status - DB
 function syncChamadoStatus($chave, $nomeStatus){
     ChamadoController::update_status_name($chave, $nomeStatus);
 }
 
-
+//sends new status request
 function interagirComChamado($chave, $nomeStatus, $conf)
 {
     $token = autenticarDM($conf);
@@ -247,7 +250,7 @@ function interagirComChamado($chave, $nomeStatus, $conf)
     }
 }
 
-
+//creates object to send in status change requeest
 function criarInteracaoAPartirDeWorkPackage($chave, $novoStatus, $conf)
 {
     $codStatus = $conf['STATUS_CODES_DM'][$novoStatus];
@@ -287,6 +290,8 @@ function montaFiltroChamadoPorStatus($status){
     return $filtro;
 }
 
+
+//gets workpackages from OpenProject and sends new statuses to deskManager
 function listarChamadosEAtualizarStatus($conf){
     $chamadosRegistrados = ChamadoController::get_chamados_can_interact();
     var_dump($chamadosRegistrados);
@@ -300,6 +305,7 @@ function listarChamadosEAtualizarStatus($conf){
     }
 
 }
+
 
 function getWorkPackageStatus($id, $conf){
     $headersOP = getHeader($conf['opToken'],1);
@@ -317,6 +323,7 @@ function getWorkPackageStatus($id, $conf){
     return $workPackage!=null?$newStatus:null;
 }
 
+//map status name from OP to deskmanager set language
 function getStatusNameFromWorkPackage($origin_name, $conf){
     $status_name = $origin_name;
 
@@ -331,7 +338,7 @@ function getStatusNameFromWorkPackage($origin_name, $conf){
     return $status_name;
 }
 
-
+//map new workpackage from deskManager object
 function getWorkpackageSchemaFromChamado($chamado, $form){
     $customerId =  getCustomerId($chamado, $form);
     $workPackage = array (

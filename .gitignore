@@ -2,5 +2,4 @@
 /apontamentos
 /.vscode
 /vendor/
-.env-sample
 .env
