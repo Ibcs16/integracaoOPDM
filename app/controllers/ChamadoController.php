@@ -5,7 +5,14 @@ use Models\Chamado;
 class ChamadoController{
 
     public static function create_chamado($chave, $cod, $status_name, $project_id=null){
-        $chamado = Chamado::updateOrCreate(['chave'=>$chave,'cod'=>$cod,'project_id'=>$project_id,'status_name'=>$status_name]);
+        $chamadoExiste = Chamado::where(array('chave'=> $chave))->count();
+
+        if($chamadoExiste>0){
+            return;
+        }
+
+        $chamado = Chamado::create(array('chave'=>$chave,'cod'=>$cod,'project_id'=>$project_id,'status_name'=>$status_name));
+
         return $chamado;
     }
 
@@ -24,7 +31,6 @@ class ChamadoController{
 
     public static function update_project_id($chave, $project_id){
 
-        var_dump($chave, $project_id);
 
         $chamado = Chamado::where(array('chave'=> $chave))->update(array('project_id'=> $project_id));
         
@@ -49,7 +55,7 @@ class ChamadoController{
 
     public static function get_chamados_can_interact(){
     
-        $chamados = Chamado::where('can_interact', 0)->get();//teste
+        $chamados = Chamado::where('can_interact', 1)->get();
 
         return $chamados;
     }

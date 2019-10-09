@@ -107,7 +107,6 @@ function listarChamadosAguardandoAtendimentoEPrevenirInteracao($filtro, $base_ur
 function doCurl($data, $baseUrl, $endpoint, $headers, $raw=false, $hasbody = true, $method = -1)
 {
 
-    //var_dump($data, $baseUrl, $endpoint, $headers, $raw, $method);
 
     $ch = curl_init();
 
@@ -129,7 +128,6 @@ function doCurl($data, $baseUrl, $endpoint, $headers, $raw=false, $hasbody = tru
     curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
     if($hasbody) curl_setopt( $ch, CURLOPT_POSTFIELDS, json_encode($data) );
 
-    //var_dump(curl_getinfo($ch));
     
     $result = curl_exec( $ch );
    
@@ -294,7 +292,7 @@ function montaFiltroChamadoPorStatus($status){
 //gets workpackages from OpenProject and sends new statuses to deskManager
 function listarChamadosEAtualizarStatus($conf){
     $chamadosRegistrados = ChamadoController::get_chamados_can_interact();
-    var_dump($chamadosRegistrados);
+
     foreach($chamadosRegistrados as $chamado){
         $oldStatus = $chamado->status_name;
         $newStatus = getWorkPackageStatus($chamado->project_id, $conf);
@@ -313,7 +311,7 @@ function getWorkPackageStatus($id, $conf){
     $data = '';
 
     $workPackage = doCurl($data, $conf['base_url_OP'], $conf['get_work_package'] . '/' . $id, $headersOP, false, false, 2);
-    var_dump($workPackage);
+   
 
     if($workPackage->_type=='Error'){
         return null;
@@ -328,7 +326,7 @@ function getStatusNameFromWorkPackage($origin_name, $conf){
     $status_name = $origin_name;
 
     foreach($conf['STATUS_CODES_OP_PT_BR'] as $status=>$value){
-        var_dump($status);
+       
         if($status_name==$status){
             $status_name = $value;
             break;
